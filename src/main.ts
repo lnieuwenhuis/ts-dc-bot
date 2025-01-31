@@ -1,7 +1,6 @@
 import { Client, Events, GatewayIntentBits } from "discord.js";
 import { deployCommands } from "./deploy-commands";
 import { loadCommands } from "./commands/index";
-import { handleModalSubmit } from "./commands/test/openModal";
 
 const commands = await loadCommands();
 
@@ -23,10 +22,6 @@ client.on(Events.ClientReady, readyClient => {
 })
 
 client.on(Events.InteractionCreate, async (interaction) => {
-    if (interaction.isModalSubmit()) {
-        await handleModalSubmit(interaction);
-    }
-
     if (!interaction.isChatInputCommand()) return;
 
     const command = commands[interaction.commandName];
