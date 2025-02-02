@@ -1,4 +1,4 @@
-This project is a TypeScript rewrite of the original `lnieuwenhuis/safasbot` found on GitHub. The bot utilizes Discord.js for interacting with the Discord API and is containerized using Docker for easy deployment and management.
+This project is a TypeScript rewrite of the original `lnieuwenhuis/safasbot`. The bot utilizes Discord.js for interacting with the Discord API and is containerized using Docker for easy deployment and management.
 
 ### Running the Bot with Docker
 
