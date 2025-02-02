@@ -28,7 +28,7 @@ To run the bot using Docker, follow these steps:
    Build the Docker image using the provided `Dockerfile`:
 
    ```bash
-   docker build -t ts-dc-bot .
+   docker build -t <your tag here> .
    ```
 
 4. **Run the Docker Container:**
@@ -36,7 +36,7 @@ To run the bot using Docker, follow these steps:
    Use `docker-compose` to run the bot in a containerized environment:
 
    ```bash
-   docker-compose up
+   docker run <your tag>
    ```
 
    This will start the bot and expose it on port 3000 as specified in the `docker-compose.yml` file.
