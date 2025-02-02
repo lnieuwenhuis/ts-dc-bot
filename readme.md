@@ -39,8 +39,6 @@ To run the bot using Docker, follow these steps:
    docker run <your tag>
    ```
 
-   This will start the bot and expose it on port 3000 as specified in the `docker-compose.yml` file.
-
 5. **Verify the Bot is Running:**
 
    Once the container is up, check the logs to ensure the bot has started successfully and is logged in to Discord.
