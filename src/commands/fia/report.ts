@@ -95,4 +95,18 @@ export async function execute(interaction: CommandInteraction) {
                 console.error(e);
             });
     });
+
+    collector.on("end", () => {
+        if (interaction.isRepliable()) {
+            interaction.editReply({
+                content: "No user selected or time ran out!",
+                components: [],
+            });
+        } else {
+            interaction.followUp({
+                content: "No user selected or time ran out!",
+                components: [],
+            });
+        }
+    });
 }

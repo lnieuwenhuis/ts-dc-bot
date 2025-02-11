@@ -86,6 +86,7 @@ export const protestHandler = async (
     });
 
     collector.on("end", async () => {
-        await message.edit({ components: [] });
+        await thread.send("This report is now closed.");
+        await thread.setArchived(true);
     });
 };
