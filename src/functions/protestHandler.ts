@@ -32,7 +32,7 @@ export const protestHandler = async (
     const embed = new EmbedBuilder()
         .setTitle(title)
         .setAuthor({ name: interaction.user.displayName, iconURL: interaction.user.displayAvatarURL() })
-        .setDescription(`Reason: ${reason}\n\nExplanation: ${explanation}\n\nSession: ${session}\n\nEvidence: ${evidence}`)
+        .setDescription(`Reason: ${reason}\n\nExplanation: ${explanation}\n\nSession: ${session}`)
         .setColor("Blue");
 
     const protestButton = new ButtonBuilder()
@@ -40,7 +40,21 @@ export const protestHandler = async (
         .setLabel("Protest")
         .setStyle(ButtonStyle.Primary);
 
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(protestButton);
+    const viewEvidenceButton = new ButtonBuilder()
+        .setLabel("View Evidence")
+        .setStyle(ButtonStyle.Secondary);
+
+    try {
+        new URL(evidence);
+        viewEvidenceButton
+            .setStyle(ButtonStyle.Link)
+            .setURL(evidence);
+    } catch {
+        viewEvidenceButton
+            .setCustomId("view_evidence_button")
+    }
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(protestButton, viewEvidenceButton);
 
     const message: Message = await thread.send({ embeds: [embed], components: [row] });
 
@@ -82,6 +96,10 @@ export const protestHandler = async (
 
                     await modalInteraction.reply({ content: "Protest submitted successfully!", ephemeral: true });
                 })
+        }
+
+        if (i.customId === "view_evidence_button") {
+            await i.reply({ content: `Evidence wasn't a valid URL: ${evidence}`, ephemeral: true });
         }
     });
 

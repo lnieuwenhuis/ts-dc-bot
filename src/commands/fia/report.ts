@@ -52,7 +52,7 @@ export async function execute(interaction: CommandInteraction) {
             { customId: "reason-input", label: "Reason", style: TextInputStyle.Short },
             { customId: "explanation-input", label: "Explanation", style: TextInputStyle.Paragraph },
             { customId: "session-input", label: "Session", style: TextInputStyle.Short },
-            { customId: "evidence-input", label: "Evidence", style: TextInputStyle.Short },
+            { customId: "evidence-input", label: "Evidence (URL)", style: TextInputStyle.Short },
         ]);
         modal.addComponents(...actionRows);
         await i.showModal(modal);
