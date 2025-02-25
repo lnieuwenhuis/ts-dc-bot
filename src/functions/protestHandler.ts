@@ -97,7 +97,7 @@ export const protestHandler = async (
                         protestEvidenceButton = new ButtonBuilder()
                         .setLabel("View Evidence")
                         .setStyle(ButtonStyle.Secondary)
-                        .setCustomId("view_evidence_button");
+                        .setCustomId("view_protest_evidence_button");
                     }
 
                     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(protestEvidenceButton);
@@ -108,7 +108,18 @@ export const protestHandler = async (
                         .setDescription(`Reason: ${protestReason}\n\nExplanation: ${protestExplanation}`)
                         .setColor("Red");
 
-                    await thread.send({ embeds: [protestEmbed], components: [row] });
+                    const protestEmbedMessage = await thread.send({ embeds: [protestEmbed], components: [row] });
+
+                    const protestEvidenceCollector = protestEmbedMessage.createMessageComponentCollector({
+                        componentType: ComponentType.Button,
+                        time: 3 * 24 * 60 * 60 * 1000, // 3 days
+                    });
+
+                    protestEvidenceCollector.on("collect", async (i: ButtonInteraction) => {
+                        if (i.customId === "view_protest_evidence_button") {
+                            await i.reply({ content: `Evidence wasn't a valid URL: ${protestEvidence}`, ephemeral: true });
+                        }
+                    });
 
                     await modalInteraction.reply({ content: "Protest submitted successfully!", ephemeral: true });
                 })
