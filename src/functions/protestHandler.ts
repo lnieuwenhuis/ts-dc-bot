@@ -72,7 +72,7 @@ export const protestHandler = async (
             const textInputs = buildModalTextInputs([
                 { customId: "reason_input", label: "Protest Reason", style: TextInputStyle.Short },
                 { customId: "explanation_input", label: "Protest Explanation", style: TextInputStyle.Paragraph },
-                { customId: "evidence_input", label: "Protest Evidence", style: TextInputStyle.Short },
+                { customId: "evidence_input", label: "Protest Evidence (URL)", style: TextInputStyle.Short },
             ]);
 
             modal.addComponents(...textInputs);
@@ -86,13 +86,29 @@ export const protestHandler = async (
                     const protestExplanation = modalInteraction.fields.getTextInputValue("explanation_input");
                     const protestEvidence = modalInteraction.fields.getTextInputValue("evidence_input");
 
+                    let protestEvidenceButton: ButtonBuilder;
+                    try {
+                        new URL(protestEvidence);
+                        protestEvidenceButton = new ButtonBuilder()
+                        .setLabel("View Evidence")
+                        .setStyle(ButtonStyle.Link)
+                        .setURL(protestEvidence);
+                    } catch {
+                        protestEvidenceButton = new ButtonBuilder()
+                        .setLabel("View Evidence")
+                        .setStyle(ButtonStyle.Secondary)
+                        .setCustomId("view_evidence_button");
+                    }
+
+                    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(protestEvidenceButton);
+
                     const protestEmbed = new EmbedBuilder()
                         .setTitle("Protest")
                         .setAuthor({ name: i.user.displayName, iconURL: i.user.displayAvatarURL() })
-                        .setDescription(`Reason: ${protestReason}\n\nExplanation: ${protestExplanation}\n\nEvidence: ${protestEvidence}`)
+                        .setDescription(`Reason: ${protestReason}\n\nExplanation: ${protestExplanation}`)
                         .setColor("Red");
 
-                    await thread.send({ embeds: [protestEmbed] });
+                    await thread.send({ embeds: [protestEmbed], components: [row] });
 
                     await modalInteraction.reply({ content: "Protest submitted successfully!", ephemeral: true });
                 })
