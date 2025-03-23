@@ -37,5 +37,8 @@ export async function execute(interaction: any) {
         };
 
         await interaction.reply({ embeds: [quoteEmbed] });
+    }).catch((e: any) => {
+        interaction.replyy({ content: 'Quote creation timed out', ephemeral: true });
+        console.error(e);
     });
 }
