@@ -21,6 +21,39 @@ client.on(Events.ClientReady, readyClient => {
     deployCommands(commands);
 })
 
+client.on(Events.MessageCreate, async (message) => {
+    if (message.author.bot) return;
+    
+    if (!message.guild) return;
+    
+    const member = message.guild.members.cache.get(message.author.id);
+    const muteRole = message.guild.roles.cache.find(role => role.name === "Muted");
+    
+    if (member && muteRole && member.roles.cache.has(muteRole.id)) {
+        try {
+            await message.delete();
+            
+            try {
+                const muteNotification = await message.channel.send(`${message.author.tag} is muted and cannot send messages in the server.`);
+                
+                // Delete the notification message after 3 seconds
+                setTimeout(async () => {
+                    try {
+                        await muteNotification.delete();
+                    } catch (deleteError) {
+                        console.log(`Could not delete mute notification: ${deleteError}`);
+                    }
+                }, 3000);
+                
+            } catch (dmError) {
+                console.log(`Could not send mute notification: ${dmError}`);
+            }
+        } catch (error) {
+            console.error('Failed to delete message from muted user:', error);
+        }
+    }
+});
+
 client.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
 
