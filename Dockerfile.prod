@@ -22,11 +22,13 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install only production dependencies
-RUN npm ci --only=production && npm cache clean --force
+# Install all dependencies (tsx needs to be available)
+RUN npm ci
 
-# Copy built application from builder stage
-COPY --from=builder /app/dist ./dist
+# Copy source code and config files
+COPY src/ ./src/
+COPY tsconfig.json ./
+COPY tsup.config.ts ./
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs
@@ -38,5 +40,5 @@ USER botuser
 
 EXPOSE 3000
 
-# Use tsx to run TypeScript directly (same as development)
+# Use tsx to run TypeScript directly
 CMD ["npx", "tsx", "src/main.ts"]
