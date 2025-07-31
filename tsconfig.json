@@ -12,5 +12,7 @@
         "strict": true,
         "strictNullChecks": true,
         "skipLibCheck": true
-    }
+    },
+    "include": ["src/**/*"],
+    "exclude": ["tsup.config.ts", "dist", "node_modules"]
 }

@@ -6,8 +6,8 @@
   "main": "src/main.ts",
   "scripts": {
     "dev": "tsx watch src/main.ts",
-    "start": "node dist/index.js",
-    "build": "tsup src/main.ts --minify"
+    "start": "node dist/main.js",
+    "build": "tsup"
   },
   "author": "lnieuwenhuis",
   "license": "MIT",
