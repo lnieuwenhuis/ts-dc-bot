@@ -32,7 +32,7 @@ export async function execute(interaction: any) {
 
         const quoteEmbed = {
             color: 0x0099FF,
-            title: `${quote}`,
+            title: `"${quote}"`,
             description: `- ${source} (${year}) \n\nQuoted by ${author}`,
         };
 
