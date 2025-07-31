@@ -53,6 +53,10 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         const guildProgress = getXpToNextLevel(userData.guild_xp);
         const totalProgress = getXpToNextLevel(userData.total_xp);
 
+        // Get requester's display name safely
+        const requesterMember = await interaction.guild?.members.fetch(interaction.user.id).catch(() => null);
+        const requesterDisplayName = requesterMember?.displayName || interaction.user.username;
+
         const embed = new EmbedBuilder()
             .setTitle(`📊 ${displayName}'s Level Stats`)
             .setThumbnail(targetUser.displayAvatarURL())
@@ -69,7 +73,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
                     inline: true
                 }
             )
-            .setFooter({ text: `Requested by ${interaction.member?.displayName || interaction.user.username}` })
+            .setFooter({ text: `Requested by ${requesterDisplayName}` })
             .setTimestamp();
 
         await interaction.reply({ embeds: [embed] });
