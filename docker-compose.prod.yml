@@ -4,31 +4,33 @@ services:
   app:
     build:
       context: .
-      dockerfile: Dockerfile
-    volumes:
-      - .:/app
-      - /app/node_modules
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
     ports:
-      - "3000"
+      - "3000:3000"
     env_file:
       - .env
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       DB_HOST: mariadb
       DB_PORT: 3306
       DB_NAME: discord_bot
       DB_USER: bot_user
       DB_PASSWORD: bot_password
-    command: npm run dev
     depends_on:
       mariadb:
         condition: service_healthy
     networks:
       - bot-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   mariadb:
     image: mariadb:10.11
-    restart: always
+    restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: root_password
       MYSQL_DATABASE: discord_bot
@@ -38,14 +40,19 @@ services:
       - mariadb_data:/var/lib/mysql
     ports:
       - "3306:3306"
+    networks:
+      - bot-network
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       start_period: 10s
       interval: 10s
       timeout: 5s
       retries: 3
-    networks:
-      - bot-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   mariadb_data:
