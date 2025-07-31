@@ -15,7 +15,7 @@ COPY . .
 RUN npm run build
 
 # Production stage
-FROM node:18-alpine AS production
+FROM node:18-alpine
 
 WORKDIR /app
 
@@ -38,5 +38,5 @@ USER botuser
 
 EXPOSE 3000
 
-# Use the production start command
-CMD ["npm", "start"]
+# Use tsx to run TypeScript directly (same as development)
+CMD ["npx", "tsx", "src/main.ts"]
