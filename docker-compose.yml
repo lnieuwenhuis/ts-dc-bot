@@ -15,7 +15,7 @@ services:
     environment:
       NODE_ENV: development
       DB_HOST: mariadb
-      DB_PORT: 3308
+      DB_PORT: 3306
       DB_NAME: discord_bot
       DB_USER: bot_user
       DB_PASSWORD: bot_password
@@ -37,7 +37,7 @@ services:
     volumes:
       - mariadb_data:/var/lib/mysql
     ports:
-      - "3308:3306"
+      - "3306:3306"
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       start_period: 10s
