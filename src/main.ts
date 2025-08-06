@@ -4,6 +4,8 @@ import { loadCommands } from "./commands/index";
 import { initDatabase } from "./utils/initDatabase";
 import { handleMessage } from "./utils/onMessage";
 import { handleBlackjackInteraction } from "./commands/casino/blackjack";
+import { Player } from "discord-player";
+import { DefaultExtractors } from "@discord-player/extractor";
 
 const db = await initDatabase();
 console.log("Database connected and initialized");
@@ -20,6 +22,9 @@ const client = new Client({
         GatewayIntentBits.GuildVoiceStates
     ],
 });
+
+const player = new Player(client);
+await player.extractors.loadMulti(DefaultExtractors);
 
 client.on(Events.ClientReady, readyClient => {
     console.log("Logged in as", readyClient.user?.tag);
