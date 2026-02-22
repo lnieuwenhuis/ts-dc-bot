@@ -22,7 +22,8 @@
     "ffmpeg-static": "^5.2.0",
     "fs": "^0.0.1-security",
     "mediaplex": "^1.0.0",
-    "mysql2": "^3.14.3"
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "tsup": "^8.3.6",

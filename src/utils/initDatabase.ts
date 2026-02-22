@@ -1,64 +1,35 @@
-import mysql from 'mysql2/promise';
+import sqlite3 from 'sqlite3';
+import { open, type Database } from 'sqlite';
+import fs from 'fs/promises';
+import path from 'path';
 
-interface DatabaseConfig {
-    host: string;
-    port: number;
-    user: string;
-    password: string;
-    database: string;
-}
+let connection: Database;
 
-let connection: mysql.Connection;
+export async function initDatabase(): Promise<Database> {
+    const volumeMountPath = process.env.RAILWAY_VOLUME_MOUNT_PATH;
+    const defaultDbPath = volumeMountPath
+        ? path.join(volumeMountPath, 'discord_bot.sqlite')
+        : path.join(process.cwd(), 'data', 'discord_bot.sqlite');
+    const dbPath = process.env.DB_PATH || defaultDbPath;
+    await fs.mkdir(path.dirname(dbPath), { recursive: true });
 
-export async function initDatabase(): Promise<mysql.Connection> {
-    const config: DatabaseConfig = {
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT || '3306'),
-        user: process.env.DB_USER || 'bot_user',
-        password: process.env.DB_PASSWORD || 'bot_password',
-        database: process.env.DB_NAME || 'discord_bot'
-    };
+    connection = await open({
+        filename: dbPath,
+        driver: sqlite3.Database
+    });
 
-    const maxRetries = 10;
-    const retryDelay = 3000; // 3 seconds
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            console.log(`Attempting to connect to database (attempt ${attempt}/${maxRetries})...`);
-            
-            // Create connection
-            connection = await mysql.createConnection(config);
-            console.log('Connected to MariaDB database');
-
-            // Run migrations only if safe to do so
-            await runMigrations();
-            
-            return connection;
-        } catch (error) {
-            console.error(`Database connection attempt ${attempt} failed:`, error);
-            
-            if (attempt === maxRetries) {
-                console.error('All database connection attempts failed');
-                throw error;
-            }
-            
-            console.log(`Retrying in ${retryDelay/1000} seconds...`);
-            await new Promise(resolve => setTimeout(resolve, retryDelay));
-        }
-    }
-    
-    throw new Error('Failed to connect to database after all retries');
+    await connection.exec('PRAGMA foreign_keys = ON;');
+    await runMigrations();
+    return connection;
 }
 
 async function checkTableExists(tableName: string): Promise<boolean> {
     try {
-        const [rows] = await connection.execute(`
-            SELECT COUNT(*) as count 
-            FROM information_schema.tables 
-            WHERE table_schema = DATABASE() 
-            AND table_name = ?
-        `, [tableName]);
-        return (rows as any[])[0].count > 0;
+        const row = await connection.get<{ name: string }>(
+            `SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`,
+            [tableName]
+        );
+        return !!row;
     } catch (error) {
         console.error(`Error checking if table ${tableName} exists:`, error);
         return false;
@@ -67,8 +38,12 @@ async function checkTableExists(tableName: string): Promise<boolean> {
 
 async function checkTableHasData(tableName: string): Promise<boolean> {
     try {
-        const [rows] = await connection.execute(`SELECT COUNT(*) as count FROM ??`, [tableName]);
-        return (rows as any[])[0].count > 0;
+        const allowedTables = new Set(['users', 'user_guilds', 'guilds']);
+        if (!allowedTables.has(tableName)) {
+            throw new Error(`Invalid table name: ${tableName}`);
+        }
+        const row = await connection.get<{ count: number }>(`SELECT COUNT(*) as count FROM ${tableName}`);
+        return (row?.count ?? 0) > 0;
     } catch (error) {
         // If table doesn't exist, it has no data
         return false;
@@ -101,46 +76,46 @@ async function runMigrations(): Promise<void> {
         }
 
         // Create users table
-        await connection.execute(`
+        await connection.exec(`
             CREATE TABLE IF NOT EXISTS users (
-                id VARCHAR(20) PRIMARY KEY,
-                username VARCHAR(255) NOT NULL,
-                discriminator VARCHAR(10),
-                chips INT DEFAULT 100,
-                total_xp BIGINT DEFAULT 0,
-                overall_level INT DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                id TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                discriminator TEXT,
+                chips INTEGER DEFAULT 100,
+                total_xp INTEGER DEFAULT 0,
+                overall_level INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         `);
 
         // Create user_guilds table for guild-specific data
-        await connection.execute(`
+        await connection.exec(`
             CREATE TABLE IF NOT EXISTS user_guilds (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id VARCHAR(20) NOT NULL,
-                guild_id VARCHAR(20) NOT NULL,
-                guild_xp BIGINT DEFAULT 0,
-                guild_level INT DEFAULT 1,
-                guild_messages INT DEFAULT 0,
-                joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_message_at TIMESTAMP NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                UNIQUE KEY unique_user_guild (user_id, guild_id),
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                guild_id TEXT NOT NULL,
+                guild_xp INTEGER DEFAULT 0,
+                guild_level INTEGER DEFAULT 1,
+                guild_messages INTEGER DEFAULT 0,
+                joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                last_message_at TEXT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (user_id, guild_id),
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
         `);
 
         // Create guilds table for guild information
-        await connection.execute(`
+        await connection.exec(`
             CREATE TABLE IF NOT EXISTS guilds (
-                id VARCHAR(20) PRIMARY KEY,
-                name VARCHAR(255) NOT NULL,
-                owner_id VARCHAR(20),
-                member_count INT DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                owner_id TEXT,
+                member_count INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         `);
 
@@ -151,6 +126,6 @@ async function runMigrations(): Promise<void> {
     }
 }
 
-export function getConnection(): mysql.Connection {
+export function getConnection(): Database {
     return connection;
 }

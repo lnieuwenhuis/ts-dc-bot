@@ -15,7 +15,7 @@ export class UserModel {
     static async create(userId: string, username: string, discriminator?: string): Promise<void> {
         const connection = getDbConnection();
         try {
-            await connection.execute(`
+            await connection.run(`
                 INSERT INTO users (id, username, discriminator, chips, total_xp, overall_level)
                 VALUES (?, ?, ?, 100, 0, 1)
             `, [userId, username, discriminator || '0000']);
@@ -28,12 +28,12 @@ export class UserModel {
     static async createOrUpdate(userId: string, username: string, discriminator?: string): Promise<void> {
         const connection = getDbConnection();
         try {
-            await connection.execute(`
+            await connection.run(`
                 INSERT INTO users (id, username, discriminator, chips, total_xp, overall_level)
                 VALUES (?, ?, ?, 100, 0, 1)
-                ON DUPLICATE KEY UPDATE
-                username = VALUES(username),
-                discriminator = VALUES(discriminator),
+                ON CONFLICT(id) DO UPDATE SET
+                username = excluded.username,
+                discriminator = excluded.discriminator,
                 updated_at = CURRENT_TIMESTAMP
             `, [userId, username, discriminator || '0000']);
         } catch (error) {
@@ -45,10 +45,10 @@ export class UserModel {
     static async findById(userId: string): Promise<User | null> {
         const connection = getDbConnection();
         try {
-            const [rows] = await connection.execute(`
+            const row = await connection.get<User>(`
                 SELECT * FROM users WHERE id = ?
             `, [userId]);
-            return (rows as User[])[0] || null;
+            return row || null;
         } catch (error) {
             console.error('Error getting user data:', error);
             throw error;
@@ -58,7 +58,7 @@ export class UserModel {
     static async updateChips(userId: string, chips: number): Promise<void> {
         const connection = getDbConnection();
         try {
-            await connection.execute(`
+            await connection.run(`
                 UPDATE users SET chips = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
             `, [chips, userId]);
@@ -71,14 +71,25 @@ export class UserModel {
     static async addXp(userId: string, xpAmount: number): Promise<void> {
         const connection = getDbConnection();
         try {
-            // Updated exponential formula: level = floor(sqrt(xp / 50)) + 1
-            await connection.execute(`
+            const row = await connection.get<{ total_xp: number }>(
+                `SELECT total_xp FROM users WHERE id = ?`,
+                [userId]
+            );
+            if (!row) {
+                return;
+            }
+            const newTotalXp = row.total_xp + xpAmount;
+            const newLevel = Math.floor(Math.sqrt(newTotalXp / 50)) + 1;
+            await connection.run(
+                `
                 UPDATE users 
-                SET total_xp = total_xp + ?,
-                    overall_level = FLOOR(SQRT((total_xp + ?) / 50)) + 1,
+                SET total_xp = ?,
+                    overall_level = ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
-            `, [xpAmount, xpAmount, userId]);
+                `,
+                [newTotalXp, newLevel, userId]
+            );
         } catch (error) {
             console.error('Error adding XP to user:', error);
             throw error;
@@ -88,7 +99,7 @@ export class UserModel {
     static async delete(userId: string): Promise<void> {
         const connection = getDbConnection();
         try {
-            await connection.execute(`
+            await connection.run(`
                 DELETE FROM users WHERE id = ?
             `, [userId]);
         } catch (error) {
@@ -100,7 +111,7 @@ export class UserModel {
     static async findAll(): Promise<User[]> {
         const connection = getDbConnection();
         try {
-            const [rows] = await connection.execute(`
+            const rows = await connection.all<User[]>(`
                 SELECT * FROM users ORDER BY overall_level DESC, total_xp DESC
             `);
             return rows as User[];
@@ -113,7 +124,7 @@ export class UserModel {
     static async getTopUsers(limit: number = 10): Promise<User[]> {
         const connection = getDbConnection();
         try {
-            const [rows] = await connection.execute(`
+            const rows = await connection.all<User[]>(`
                 SELECT * FROM users 
                 ORDER BY overall_level DESC, total_xp DESC 
                 LIMIT ?

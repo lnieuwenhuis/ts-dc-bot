@@ -1,6 +1,6 @@
 import { getConnection } from '../utils/initDatabase.js';
-import mysql from 'mysql2/promise';
+import type { Database } from 'sqlite';
 
-export function getDbConnection(): mysql.Connection {
+export function getDbConnection(): Database {
     return getConnection();
 }

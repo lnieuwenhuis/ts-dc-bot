@@ -1,20 +1,22 @@
 FROM node:20-alpine
 
-# Install system dependencies for native modules
 RUN apk add --no-cache python3 make g++ ffmpeg git
 
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
 
-# Clear npm cache and install dependencies
-RUN npm cache clean --force
-RUN npm install --verbose
+RUN npm ci
 
-# Copy source code
-COPY . .
+COPY src/ ./src/
+COPY tsconfig.json ./
+COPY tsup.config.ts ./
+
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S botuser -u 1001
+RUN chown -R botuser:nodejs /app
+USER botuser
 
 EXPOSE 3000
 
-CMD ["npm", "run", "dev"]
+CMD ["npx", "tsx", "src/main.ts"]
