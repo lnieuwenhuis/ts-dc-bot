@@ -13,7 +13,7 @@ export class GuildModel {
     static async create(guildId: string, name: string, ownerId?: string, memberCount: number = 0): Promise<void> {
         const connection = getDbConnection();
         try {
-            await connection.execute(`
+            await connection.run(`
                 INSERT INTO guilds (id, name, owner_id, member_count)
                 VALUES (?, ?, ?, ?)
             `, [guildId, name, ownerId, memberCount]);
@@ -26,13 +26,13 @@ export class GuildModel {
     static async createOrUpdate(guildId: string, name: string, ownerId?: string, memberCount: number = 0): Promise<void> {
         const connection = getDbConnection();
         try {
-            await connection.execute(`
+            await connection.run(`
                 INSERT INTO guilds (id, name, owner_id, member_count)
                 VALUES (?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE
-                name = VALUES(name),
-                owner_id = VALUES(owner_id),
-                member_count = VALUES(member_count),
+                ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                owner_id = excluded.owner_id,
+                member_count = excluded.member_count,
                 updated_at = CURRENT_TIMESTAMP
             `, [guildId, name, ownerId, memberCount]);
         } catch (error) {
@@ -44,10 +44,10 @@ export class GuildModel {
     static async findById(guildId: string): Promise<Guild | null> {
         const connection = getDbConnection();
         try {
-            const [rows] = await connection.execute(`
+            const row = await connection.get<Guild>(`
                 SELECT * FROM guilds WHERE id = ?
             `, [guildId]);
-            return (rows as Guild[])[0] || null;
+            return row || null;
         } catch (error) {
             console.error('Error getting guild data:', error);
             throw error;
@@ -57,7 +57,7 @@ export class GuildModel {
     static async updateMemberCount(guildId: string, memberCount: number): Promise<void> {
         const connection = getDbConnection();
         try {
-            await connection.execute(`
+            await connection.run(`
                 UPDATE guilds SET member_count = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
             `, [memberCount, guildId]);
@@ -70,7 +70,7 @@ export class GuildModel {
     static async delete(guildId: string): Promise<void> {
         const connection = getDbConnection();
         try {
-            await connection.execute(`
+            await connection.run(`
                 DELETE FROM guilds WHERE id = ?
             `, [guildId]);
         } catch (error) {
@@ -82,7 +82,7 @@ export class GuildModel {
     static async findAll(): Promise<Guild[]> {
         const connection = getDbConnection();
         try {
-            const [rows] = await connection.execute(`
+            const rows = await connection.all<Guild[]>(`
                 SELECT * FROM guilds ORDER BY member_count DESC
             `);
             return rows as Guild[];
