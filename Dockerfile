@@ -14,4 +14,4 @@ COPY tsup.config.ts ./
 
 EXPOSE 3000
 
-CMD ["npx", "tsx", "src/main.ts"]
+CMD ["node", "--dns-result-order=ipv4first", "--import=tsx", "src/main.ts"]
