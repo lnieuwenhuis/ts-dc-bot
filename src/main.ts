@@ -126,6 +126,15 @@ client.on('error', (error) => {
     console.error('Discord client error:', error);
 });
 
+client.on('debug', (msg) => {
+    // Filter to only the most useful lines to avoid log spam
+    if (msg.includes('Connecting') || msg.includes('429') || msg.includes('rate limit') ||
+        msg.includes('Identifying') || msg.includes('READY') || msg.includes('gateway') ||
+        msg.includes('Waiting') || msg.includes('session') || msg.includes('heartbeat')) {
+        console.log('[discord]', msg);
+    }
+});
+
 console.log("Logging in to Discord...");
 client.login(process.env.DISCORD_TOKEN).catch((error) => {
     console.error("Failed to login to Discord:", error);
