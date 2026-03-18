@@ -1,30 +1,33 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const currentDir = path.dirname(fileURLToPath(import.meta.url));
+import * as quote from './general/quote.js';
+import * as ping from './general/ping.js';
+import * as level from './general/level.js';
+import * as multiquote from './general/multiquote.js';
+import * as report from './fia/report.js';
+import * as unmute from './admin/unmute.js';
+import * as purge from './admin/purge.js';
+import * as mute from './admin/mute.js';
+import * as stop from './music/stop.js';
+import * as skip from './music/skip.js';
+import * as play from './music/play.js';
+import * as forecast from './weather/forecast.js';
+import * as weather from './weather/weather.js';
+import * as blackjack from './casino/blackjack.js';
 
 export async function loadCommands() {
-    const commands: Record<string, any> = {};
-
-    const subDirs = fs.readdirSync(currentDir, { withFileTypes: true }).filter(dirent => dirent.isDirectory());
-
-    for (const dirent of subDirs) {
-        const subDirPath = path.join(currentDir, dirent.name);
-        const files = fs.readdirSync(subDirPath).filter(file => file.endsWith('.ts'));
-
-        for (const file of files) {
-            const moduleName = path.basename(file, '.ts');
-            const modulePath = `file://${path.join(subDirPath, file)}`;
-            
-            try {
-                const module = await import(modulePath);
-                commands[moduleName] = module;
-            } catch (error) {
-                console.error(`Failed to import ${modulePath}:`, error);
-            }
-        }
-    }
-
-    return commands;
+    return {
+        quote,
+        ping,
+        level,
+        multiquote,
+        report,
+        unmute,
+        purge,
+        mute,
+        stop,
+        skip,
+        play,
+        forecast,
+        weather,
+        blackjack,
+    } as Record<string, any>;
 }

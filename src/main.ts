@@ -7,10 +7,20 @@ import { handleBlackjackInteraction } from "./commands/casino/blackjack";
 // import { Player } from "discord-player";
 // import { DefaultExtractors } from "@discord-player/extractor";
 
+process.on('unhandledRejection', (reason) => {
+    console.error('Unhandled rejection:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught exception:', error);
+    process.exit(1);
+});
+
 const db = await initDatabase();
 console.log("Database connected and initialized");
 
 const commands = await loadCommands();
+console.log(`Loaded ${Object.keys(commands).length} commands:`, Object.keys(commands).join(', '));
 
 const client = new Client({
     intents: [
@@ -104,4 +114,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
 // Export database connection for use in other modules
 export { db };
 
-client.login(process.env.DISCORD_TOKEN);
+console.log("Logging in to Discord...");
+client.login(process.env.DISCORD_TOKEN).catch((error) => {
+    console.error("Failed to login to Discord:", error);
+    process.exit(1);
+});
