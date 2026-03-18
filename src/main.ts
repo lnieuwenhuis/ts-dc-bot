@@ -4,13 +4,31 @@ import { loadCommands } from "./commands/index";
 import { initDatabase } from "./utils/initDatabase";
 import { handleMessage } from "./utils/onMessage";
 import { handleBlackjackInteraction } from "./commands/casino/blackjack";
-import { Player } from "discord-player";
-import { DefaultExtractors } from "@discord-player/extractor";
+import { createServer } from "http";
+// import { Player } from "discord-player";
+// import { DefaultExtractors } from "@discord-player/extractor";
+
+// Bind to Railway's port immediately so the health check passes and
+// outbound networking is fully available before we connect to Discord.
+const port = process.env.PORT || 8080;
+createServer((_, res) => { res.writeHead(200); res.end("OK"); }).listen(port, () => {
+    console.log(`Health check server listening on port ${port}`);
+});
+
+process.on('unhandledRejection', (reason) => {
+    console.error('Unhandled rejection:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught exception:', error);
+    process.exit(1);
+});
 
 const db = await initDatabase();
 console.log("Database connected and initialized");
 
 const commands = await loadCommands();
+console.log(`Loaded ${Object.keys(commands).length} commands:`, Object.keys(commands).join(', '));
 
 const client = new Client({
     intents: [
@@ -23,8 +41,8 @@ const client = new Client({
     ],
 });
 
-const player = new Player(client);
-await player.extractors.loadMulti(DefaultExtractors);
+// const player = new Player(client);
+// await player.extractors.loadMulti(DefaultExtractors);
 
 client.on(Events.ClientReady, readyClient => {
     console.log("Logged in as", readyClient.user?.tag);
@@ -104,4 +122,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
 // Export database connection for use in other modules
 export { db };
 
-client.login(process.env.DISCORD_TOKEN);
+client.on('error', (error) => {
+    console.error('Discord client error:', error);
+});
+
+
+console.log("Logging in to Discord...");
+client.login(process.env.DISCORD_TOKEN).catch((error) => {
+    console.error("Failed to login to Discord:", error);
+    process.exit(1);
+});

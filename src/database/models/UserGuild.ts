@@ -29,7 +29,7 @@ export class UserGuildModel {
             await UserModel.createOrUpdate(userId, 'Unknown', '0000');
 
             // Then create user guild record
-            await connection.execute(`
+            await connection.run(`
                 INSERT INTO user_guilds (user_id, guild_id, guild_xp, guild_level, guild_messages)
                 VALUES (?, ?, 0, 1, 0)
             `, [userId, guildId]);
@@ -46,10 +46,10 @@ export class UserGuildModel {
             await UserModel.createOrUpdate(userId, 'Unknown', '0000');
 
             // Then create/update user guild record
-            await connection.execute(`
+            await connection.run(`
                 INSERT INTO user_guilds (user_id, guild_id, guild_xp, guild_level, guild_messages)
                 VALUES (?, ?, 0, 1, 0)
-                ON DUPLICATE KEY UPDATE
+                ON CONFLICT(user_id, guild_id) DO UPDATE SET
                 updated_at = CURRENT_TIMESTAMP
             `, [userId, guildId]);
         } catch (error) {
@@ -61,13 +61,13 @@ export class UserGuildModel {
     static async findByUserAndGuild(userId: string, guildId: string): Promise<UserGuildWithUserData | null> {
         const connection = getDbConnection();
         try {
-            const [rows] = await connection.execute(`
+            const row = await connection.get<UserGuildWithUserData>(`
                 SELECT ug.*, u.username, u.chips, u.total_xp, u.overall_level
                 FROM user_guilds ug
                 JOIN users u ON ug.user_id = u.id
                 WHERE ug.user_id = ? AND ug.guild_id = ?
             `, [userId, guildId]);
-            return (rows as UserGuildWithUserData[])[0] || null;
+            return row || null;
         } catch (error) {
             console.error('Error getting user guild data:', error);
             throw error;
@@ -77,7 +77,7 @@ export class UserGuildModel {
     static async findByGuild(guildId: string): Promise<UserGuildWithUserData[]> {
         const connection = getDbConnection();
         try {
-            const [rows] = await connection.execute(`
+            const rows = await connection.all<UserGuildWithUserData[]>(`
                 SELECT ug.*, u.username, u.chips, u.total_xp, u.overall_level
                 FROM user_guilds ug
                 JOIN users u ON ug.user_id = u.id
@@ -94,7 +94,7 @@ export class UserGuildModel {
     static async findByUser(userId: string): Promise<UserGuild[]> {
         const connection = getDbConnection();
         try {
-            const [rows] = await connection.execute(`
+            const rows = await connection.all<UserGuild[]>(`
                 SELECT * FROM user_guilds WHERE user_id = ?
             `, [userId]);
             return rows as UserGuild[];
@@ -107,14 +107,32 @@ export class UserGuildModel {
     static async addGuildXp(userId: string, guildId: string, xpAmount: number): Promise<void> {
         const connection = getDbConnection();
         try {
-            // Update guild XP and level with new exponential formula
-            await connection.execute(`
+            let row = await connection.get<{ guild_xp: number }>(
+                `SELECT guild_xp FROM user_guilds WHERE user_id = ? AND guild_id = ?`,
+                [userId, guildId]
+            );
+            if (!row) {
+                await UserGuildModel.createOrUpdate(userId, guildId);
+                row = await connection.get<{ guild_xp: number }>(
+                    `SELECT guild_xp FROM user_guilds WHERE user_id = ? AND guild_id = ?`,
+                    [userId, guildId]
+                );
+            }
+            if (!row) {
+                return;
+            }
+            const newGuildXp = row.guild_xp + xpAmount;
+            const newGuildLevel = Math.floor(Math.sqrt(newGuildXp / 50)) + 1;
+            await connection.run(
+                `
                 UPDATE user_guilds 
-                SET guild_xp = guild_xp + ?, 
-                    guild_level = FLOOR(SQRT((guild_xp + ?) / 50)) + 1,
+                SET guild_xp = ?, 
+                    guild_level = ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE user_id = ? AND guild_id = ?
-            `, [xpAmount, xpAmount, userId, guildId]);
+                `,
+                [newGuildXp, newGuildLevel, userId, guildId]
+            );
 
             // Also update user's total XP
             await UserModel.addXp(userId, xpAmount);
@@ -127,7 +145,7 @@ export class UserGuildModel {
     static async incrementMessages(userId: string, guildId: string): Promise<void> {
         const connection = getDbConnection();
         try {
-            await connection.execute(`
+            await connection.run(`
                 UPDATE user_guilds 
                 SET guild_messages = guild_messages + 1,
                     last_message_at = CURRENT_TIMESTAMP,
@@ -143,7 +161,7 @@ export class UserGuildModel {
     static async getTopUsersInGuild(guildId: string, limit: number = 10): Promise<UserGuildWithUserData[]> {
         const connection = getDbConnection();
         try {
-            const [rows] = await connection.execute(`
+            const rows = await connection.all<UserGuildWithUserData[]>(`
                 SELECT ug.*, u.username, u.chips, u.total_xp, u.overall_level
                 FROM user_guilds ug
                 JOIN users u ON ug.user_id = u.id
@@ -161,7 +179,7 @@ export class UserGuildModel {
     static async delete(userId: string, guildId: string): Promise<void> {
         const connection = getDbConnection();
         try {
-            await connection.execute(`
+            await connection.run(`
                 DELETE FROM user_guilds WHERE user_id = ? AND guild_id = ?
             `, [userId, guildId]);
         } catch (error) {
