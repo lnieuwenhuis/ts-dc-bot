@@ -114,8 +114,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
 // Export database connection for use in other modules
 export { db };
 
+client.on('error', (error) => {
+    console.error('Discord client error:', error);
+});
+
 console.log("Logging in to Discord...");
-client.login(process.env.DISCORD_TOKEN).catch((error) => {
+const loginTimeout = setTimeout(() => {
+    console.error("Login timed out after 30 seconds. Check: 1) DISCORD_TOKEN env var in Railway, 2) Privileged intents (GuildMembers, GuildPresences, MessageContent) are enabled in the Discord Developer Portal.");
+    process.exit(1);
+}, 30000);
+
+client.login(process.env.DISCORD_TOKEN).then(() => {
+    clearTimeout(loginTimeout);
+}).catch((error) => {
+    clearTimeout(loginTimeout);
     console.error("Failed to login to Discord:", error);
     process.exit(1);
 });
