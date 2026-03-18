@@ -4,8 +4,16 @@ import { loadCommands } from "./commands/index";
 import { initDatabase } from "./utils/initDatabase";
 import { handleMessage } from "./utils/onMessage";
 import { handleBlackjackInteraction } from "./commands/casino/blackjack";
+import { createServer } from "http";
 // import { Player } from "discord-player";
 // import { DefaultExtractors } from "@discord-player/extractor";
+
+// Bind to Railway's port immediately so the health check passes and
+// outbound networking is fully available before we connect to Discord.
+const port = process.env.PORT || 8080;
+createServer((_, res) => { res.writeHead(200); res.end("OK"); }).listen(port, () => {
+    console.log(`Health check server listening on port ${port}`);
+});
 
 process.on('unhandledRejection', (reason) => {
     console.error('Unhandled rejection:', reason);
