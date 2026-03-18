@@ -126,8 +126,27 @@ client.on('error', (error) => {
     console.error('Discord client error:', error);
 });
 
+// Connectivity diagnostics
+const testUrl = async (label: string, url: string) => {
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeout);
+        console.log(`[net] ${label}: OK (${res.status})`);
+        return true;
+    } catch (e: any) {
+        console.error(`[net] ${label}: FAILED - ${e?.message}`);
+        return false;
+    }
+};
+
+console.log("Running connectivity tests...");
+await testUrl('example.com (generic HTTPS)', 'https://example.com');
+await testUrl('discord.com (REST API, no auth)', 'https://discord.com/api/v10/gateway');
+
 // Test REST API connectivity and token validity before attempting WebSocket login
-console.log("Testing Discord REST API...");
+console.log("Testing Discord REST API with token...");
 try {
     const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN!);
     const me = await rest.get(Routes.user('@me')) as any;
