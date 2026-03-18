@@ -1,4 +1,4 @@
-import { Client, Events, GatewayIntentBits, REST, Routes } from "discord.js";
+import { Client, Events, GatewayIntentBits } from "discord.js";
 import { deployCommands } from "./deploy-commands";
 import { loadCommands } from "./commands/index";
 import { initDatabase } from "./utils/initDatabase";
@@ -126,47 +126,8 @@ client.on('error', (error) => {
     console.error('Discord client error:', error);
 });
 
-// Connectivity diagnostics
-const testUrl = async (label: string, url: string) => {
-    try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 8000);
-        const res = await fetch(url, { signal: controller.signal });
-        clearTimeout(timeout);
-        console.log(`[net] ${label}: OK (${res.status})`);
-        return true;
-    } catch (e: any) {
-        console.error(`[net] ${label}: FAILED - ${e?.message}`);
-        return false;
-    }
-};
-
-console.log("Running connectivity tests...");
-await testUrl('example.com (generic HTTPS)', 'https://example.com');
-await testUrl('discord.com (REST API, no auth)', 'https://discord.com/api/v10/gateway');
-
-// Test REST API connectivity and token validity before attempting WebSocket login
-console.log("Testing Discord REST API with token...");
-try {
-    const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN!);
-    const me = await rest.get(Routes.user('@me')) as any;
-    console.log(`Discord REST API OK. Bot user: ${me.username}#${me.discriminator}`);
-} catch (error: any) {
-    console.error("Discord REST API test FAILED:", error?.message ?? error);
-    console.error("This means either the DISCORD_TOKEN in Railway is wrong/outdated, or Discord's API is unreachable from this Railway region.");
-    process.exit(1);
-}
-
 console.log("Logging in to Discord...");
-const loginTimeout = setTimeout(() => {
-    console.error("Login timed out after 30 seconds. Check: 1) DISCORD_TOKEN env var in Railway, 2) Privileged intents (GuildMembers, GuildPresences, MessageContent) are enabled in the Discord Developer Portal.");
-    process.exit(1);
-}, 30000);
-
-client.login(process.env.DISCORD_TOKEN).then(() => {
-    clearTimeout(loginTimeout);
-}).catch((error) => {
-    clearTimeout(loginTimeout);
+client.login(process.env.DISCORD_TOKEN).catch((error) => {
     console.error("Failed to login to Discord:", error);
     process.exit(1);
 });
