@@ -10,6 +10,9 @@ import { encodeToken } from './api/auth.js';
 import './api/routes/stats.js';
 import './api/routes/guilds.js';
 import './api/routes/users.js';
+import { GuildModel } from './database/models/Guild.js';
+import { UserModel } from './database/models/User.js';
+import { getDbConnection } from './database/connection.js';
 // import { Player } from "discord-player";
 // import { DefaultExtractors } from "@discord-player/extractor";
 
@@ -57,11 +60,94 @@ const client = new Client({
 // const player = new Player(client);
 // await player.extractors.loadMulti(DefaultExtractors);
 
-client.on(Events.ClientReady, readyClient => {
+async function syncGuildsAndMembers(readyClient: typeof client & { isReady(): true }) {
+    console.log(`Syncing ${readyClient.guilds.cache.size} guilds to database...`);
+    for (const [, guild] of readyClient.guilds.cache) {
+        try {
+            // Upsert guild record
+            await GuildModel.createOrUpdate(guild.id, guild.name, guild.ownerId ?? undefined, guild.memberCount);
+
+            // Fetch all members to resolve real usernames
+            const members = await guild.members.fetch();
+            for (const [, member] of members) {
+                if (member.user.bot) continue;
+                // createOrUpdate sets the real username; if the user row exists with
+                // 'Unknown' it will be overwritten with the actual Discord username.
+                await UserModel.createOrUpdate(
+                    member.user.id,
+                    member.user.username,
+                    member.user.discriminator
+                );
+            }
+            console.log(`Synced guild "${guild.name}" with ${members.size} members`);
+        } catch (err) {
+            console.error(`Failed to sync guild ${guild.name}:`, err);
+        }
+    }
+    console.log("Guild + member sync complete.");
+}
+
+async function reconcileDatabaseFromDiscord(readyClient: typeof client & { isReady(): true }) {
+    const db = getDbConnection();
+
+    const missingGuildRows = await db.all<{ guild_id: string }[]>(`
+        SELECT DISTINCT ug.guild_id
+        FROM user_guilds ug
+        LEFT JOIN guilds g ON g.id = ug.guild_id
+        WHERE g.id IS NULL
+    `);
+
+    if (missingGuildRows.length > 0) {
+        console.log(`Backfilling ${missingGuildRows.length} guild records from user_guilds...`);
+    }
+
+    for (const row of missingGuildRows) {
+        try {
+            const guild = await readyClient.guilds.fetch(row.guild_id);
+            await GuildModel.createOrUpdate(guild.id, guild.name, guild.ownerId ?? undefined, guild.memberCount);
+        } catch (error) {
+            console.error(`Failed to resolve missing guild ${row.guild_id}:`, error);
+        }
+    }
+
+    const unknownUsers = await db.all<{ id: string }[]>(`
+        SELECT id FROM users
+        WHERE username IS NULL OR TRIM(username) = '' OR username = 'Unknown'
+    `);
+
+    if (unknownUsers.length > 0) {
+        console.log(`Resolving ${unknownUsers.length} placeholder usernames from Discord...`);
+    }
+
+    for (const row of unknownUsers) {
+        try {
+            const user = await readyClient.users.fetch(row.id);
+            await UserModel.createOrUpdate(user.id, user.username, user.discriminator);
+        } catch (error) {
+            console.error(`Failed to resolve username for ${row.id}:`, error);
+        }
+    }
+}
+
+client.on(Events.ClientReady, async readyClient => {
     console.log("Logged in as", readyClient.user?.tag);
 
     deployCommands(commands);
+
+    // Backfill guilds table and resolve 'Unknown' usernames on every startup
+    await syncGuildsAndMembers(readyClient);
+    await reconcileDatabaseFromDiscord(readyClient);
 })
+
+// Keep guild table up to date when the bot joins new servers
+client.on(Events.GuildCreate, async guild => {
+    try {
+        await GuildModel.createOrUpdate(guild.id, guild.name, guild.ownerId ?? undefined, guild.memberCount);
+        console.log(`Bot joined new guild: "${guild.name}" — added to DB`);
+    } catch (err) {
+        console.error(`Failed to create guild record for ${guild.name}:`, err);
+    }
+});
 
 // Use the new handleMessage utility
 client.on(Events.MessageCreate, handleMessage);

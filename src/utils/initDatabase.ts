@@ -52,28 +52,15 @@ async function checkTableHasData(tableName: string): Promise<boolean> {
 
 async function runMigrations(): Promise<void> {
     try {
-        // Check if any of our main tables exist and have data
         const usersExists = await checkTableExists('users');
         const userGuildsExists = await checkTableExists('user_guilds');
         const guildsExists = await checkTableExists('guilds');
 
-        if (usersExists || userGuildsExists || guildsExists) {
-            console.log('Database tables already exist. Checking for data...');
-            
-            const usersHasData = usersExists ? await checkTableHasData('users') : false;
-            const userGuildsHasData = userGuildsExists ? await checkTableHasData('user_guilds') : false;
-            const guildsHasData = guildsExists ? await checkTableHasData('guilds') : false;
-
-            if (usersHasData || userGuildsHasData || guildsHasData) {
-                console.log('⚠️  Database tables contain data. Skipping migrations to prevent data loss.');
-                console.log('If you need to run migrations, please backup your data first and manually drop the tables.');
-                return;
-            } else {
-                console.log('Tables exist but are empty. Safe to proceed with migrations.');
-            }
-        } else {
-            console.log('No existing tables found. Running initial migrations...');
-        }
+        console.log(
+            `Preparing database schema (users: ${usersExists ? 'exists' : 'missing'}, ` +
+            `user_guilds: ${userGuildsExists ? 'exists' : 'missing'}, ` +
+            `guilds: ${guildsExists ? 'exists' : 'missing'})`
+        );
 
         // Create users table
         await connection.exec(`
@@ -119,7 +106,15 @@ async function runMigrations(): Promise<void> {
             )
         `);
 
-        console.log('✅ Database migrations completed successfully');
+        const usersHasData = await checkTableHasData('users');
+        const userGuildsHasData = await checkTableHasData('user_guilds');
+        const guildsHasData = await checkTableHasData('guilds');
+
+        console.log(
+            `✅ Database schema ready (users rows: ${usersHasData ? 'present' : 'empty'}, ` +
+            `user_guilds rows: ${userGuildsHasData ? 'present' : 'empty'}, ` +
+            `guilds rows: ${guildsHasData ? 'present' : 'empty'})`
+        );
     } catch (error) {
         console.error('❌ Migration failed:', error);
         throw error;

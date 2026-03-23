@@ -1,5 +1,6 @@
 import { Message } from 'discord.js';
 import { UserModel, UserGuildModel } from '../database/index.js';
+import { GuildModel } from '../database/models/Guild.js';
 
 // Cooldown map to prevent XP spam (user ID -> last XP time)
 const xpCooldowns = new Map<string, number>();
@@ -63,6 +64,13 @@ async function handleXpReward(message: Message): Promise<void> {
     }
     
     try {
+        await GuildModel.createOrUpdate(
+            message.guild!.id,
+            message.guild!.name,
+            message.guild!.ownerId ?? undefined,
+            message.guild!.memberCount
+        );
+
         // Ensure user and user_guild records exist
         await UserModel.createOrUpdate(userId, username, discriminator);
         await UserGuildModel.createOrUpdate(userId, guildId);
