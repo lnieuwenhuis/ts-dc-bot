@@ -8,47 +8,43 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
+      - bot_data:/data
     ports:
       - "3000"
     env_file:
       - .env
     environment:
       NODE_ENV: development
-      DB_HOST: mariadb
-      DB_PORT: 3306
-      DB_NAME: discord_bot
-      DB_USER: bot_user
-      DB_PASSWORD: bot_password
     command: npm run dev
-    depends_on:
-      mariadb:
-        condition: service_healthy
     networks:
       - bot-network
 
-  mariadb:
-    image: mariadb:10.11
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: root_password
-      MYSQL_DATABASE: discord_bot
-      MYSQL_USER: bot_user
-      MYSQL_PASSWORD: bot_password
-    volumes:
-      - mariadb_data:/var/lib/mysql
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
     ports:
-      - "3306:3306"
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      start_period: 10s
-      interval: 10s
-      timeout: 5s
-      retries: 3
+      - "8081:8081"
+    volumes:
+      - bot_data:/data
+    env_file:
+      - .env
+    networks:
+      - bot-network
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    environment:
+      VITE_API_URL: http://localhost:8081
     networks:
       - bot-network
 
 volumes:
-  mariadb_data:
+  bot_data:
 
 networks:
   bot-network:
