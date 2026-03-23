@@ -87,6 +87,36 @@ async function syncGuildsAndMembers(readyClient: typeof client & { isReady(): tr
     console.log("Guild + member sync complete.");
 }
 
+function isDiscordApiError(error: unknown): error is { code?: number; status?: number } {
+    return typeof error === 'object' && error !== null && ('code' in error || 'status' in error);
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+    return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+            setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+        })
+    ]);
+}
+
+function findUsernameInGuildCaches(
+    readyClient: typeof client & { isReady(): true },
+    userId: string
+): { username: string; discriminator?: string } | null {
+    for (const [, guild] of readyClient.guilds.cache) {
+        const member = guild.members.cache.get(userId);
+        if (member) {
+            return {
+                username: member.user.username,
+                discriminator: member.user.discriminator
+            };
+        }
+    }
+
+    return null;
+}
+
 async function reconcileDatabaseFromDiscord(readyClient: typeof client & { isReady(): true }) {
     const db = getDbConnection();
 
@@ -103,9 +133,18 @@ async function reconcileDatabaseFromDiscord(readyClient: typeof client & { isRea
 
     for (const row of missingGuildRows) {
         try {
-            const guild = await readyClient.guilds.fetch(row.guild_id);
+            const guild = await withTimeout(
+                readyClient.guilds.fetch(row.guild_id),
+                10_000,
+                `Fetching guild ${row.guild_id}`
+            );
             await GuildModel.createOrUpdate(guild.id, guild.name, guild.ownerId ?? undefined, guild.memberCount);
         } catch (error) {
+            if (isDiscordApiError(error) && error.code === 10004) {
+                console.warn(`Skipping missing guild ${row.guild_id}: bot no longer has access.`);
+                continue;
+            }
+
             console.error(`Failed to resolve missing guild ${row.guild_id}:`, error);
         }
     }
@@ -119,14 +158,43 @@ async function reconcileDatabaseFromDiscord(readyClient: typeof client & { isRea
         console.log(`Resolving ${unknownUsers.length} placeholder usernames from Discord...`);
     }
 
-    for (const row of unknownUsers) {
+    let resolvedUsers = 0;
+    let skippedUsers = 0;
+
+    for (const [index, row] of unknownUsers.entries()) {
         try {
-            const user = await readyClient.users.fetch(row.id);
+            const cachedUser = findUsernameInGuildCaches(readyClient, row.id);
+            if (cachedUser) {
+                await UserModel.createOrUpdate(row.id, cachedUser.username, cachedUser.discriminator);
+                resolvedUsers += 1;
+                continue;
+            }
+
+            const user = await withTimeout(
+                readyClient.users.fetch(row.id),
+                10_000,
+                `Fetching user ${row.id}`
+            );
             await UserModel.createOrUpdate(user.id, user.username, user.discriminator);
+            resolvedUsers += 1;
         } catch (error) {
-            console.error(`Failed to resolve username for ${row.id}:`, error);
+            skippedUsers += 1;
+
+            if (isDiscordApiError(error) && error.code === 10013) {
+                console.warn(`Skipping unknown user ${row.id}: Discord no longer recognizes this account.`);
+                continue;
+            }
+
+            console.error(
+                `Failed to resolve username for ${row.id} (${index + 1}/${unknownUsers.length}):`,
+                error
+            );
         }
     }
+
+    console.log(
+        `Username reconciliation complete. Resolved ${resolvedUsers}, skipped ${skippedUsers}.`
+    );
 }
 
 client.on(Events.ClientReady, async readyClient => {
@@ -136,8 +204,10 @@ client.on(Events.ClientReady, async readyClient => {
 
     // Backfill guilds table and resolve 'Unknown' usernames on every startup
     await syncGuildsAndMembers(readyClient);
-    await reconcileDatabaseFromDiscord(readyClient);
-})
+    void reconcileDatabaseFromDiscord(readyClient).catch(error => {
+        console.error('Background reconciliation failed:', error);
+    });
+});
 
 // Keep guild table up to date when the bot joins new servers
 client.on(Events.GuildCreate, async guild => {
