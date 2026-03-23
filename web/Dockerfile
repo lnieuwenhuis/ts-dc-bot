@@ -7,5 +7,5 @@ RUN npm run build
 
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
+# Use nginx templates dir so envsubst replaces ${PORT} at container start
+COPY nginx.conf /etc/nginx/templates/default.conf.template
