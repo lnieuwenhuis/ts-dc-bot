@@ -8,7 +8,8 @@
         "DISCORD_CLIENT_ID": "",
         "WEATHER_API_KEY": "",
         "DB_PATH": "/data/discord_bot.sqlite",
-        "RAILWAY_VOLUME_MOUNT_PATH": "/data"
+        "RAILWAY_VOLUME_MOUNT_PATH": "/data",
+        "RAILWAY_RUN_UID": "0"
       }
     },
     "api": {
