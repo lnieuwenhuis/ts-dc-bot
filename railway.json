@@ -1,0 +1,30 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "services": {
+    "bot": {
+      "source": ".",
+      "variables": {
+        "DISCORD_TOKEN": "",
+        "DISCORD_CLIENT_ID": "",
+        "WEATHER_API_KEY": "",
+        "DB_PATH": "/data/discord_bot.sqlite",
+        "RAILWAY_VOLUME_MOUNT_PATH": "/data"
+      }
+    },
+    "api": {
+      "source": "./api",
+      "variables": {
+        "DB_PATH": "/data/discord_bot.sqlite",
+        "API_PORT": "8081",
+        "ADMIN_PASSWORD": "",
+        "JWT_SECRET": ""
+      }
+    },
+    "web": {
+      "source": "./web",
+      "variables": {
+        "VITE_API_URL": ""
+      }
+    }
+  }
+}
