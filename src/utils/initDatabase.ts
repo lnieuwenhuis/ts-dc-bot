@@ -8,11 +8,12 @@ let connection: Database;
 
 export async function initDatabase(): Promise<Database> {
     const volumeMountPath = process.env.RAILWAY_VOLUME_MOUNT_PATH;
-    const defaultDbPath = volumeMountPath
-        ? path.join(volumeMountPath, 'discord_bot.sqlite')
-        : path.join(process.cwd(), 'data', 'discord_bot.sqlite');
-    const dbPath = process.env.DB_PATH || defaultDbPath;
-    await prepareDatabasePath(dbPath);
+    const localFallbackPath = path.join(process.cwd(), 'data', 'discord_bot.sqlite');
+    const requestedDbPath = process.env.DB_PATH
+        || (volumeMountPath
+            ? path.join(volumeMountPath, 'discord_bot.sqlite')
+            : localFallbackPath);
+    const dbPath = await resolveUsableDatabasePath(requestedDbPath, localFallbackPath);
 
     connection = await open({
         filename: dbPath,
@@ -24,9 +25,36 @@ export async function initDatabase(): Promise<Database> {
     return connection;
 }
 
+async function resolveUsableDatabasePath(requestedDbPath: string, fallbackDbPath: string): Promise<string> {
+    const candidatePaths = requestedDbPath === fallbackDbPath
+        ? [requestedDbPath]
+        : [requestedDbPath, fallbackDbPath];
+
+    for (const candidatePath of candidatePaths) {
+        try {
+            await prepareDatabasePath(candidatePath);
+            if (candidatePath !== requestedDbPath) {
+                console.warn(
+                    `Using fallback database path ${candidatePath} because ${requestedDbPath} is not writable.`
+                );
+            } else {
+                console.log(`Using database path ${candidatePath}`);
+            }
+            return candidatePath;
+        } catch (error) {
+            console.error(`Database path ${candidatePath} is unavailable:`, error);
+        }
+    }
+
+    throw new Error(
+        `No writable database path available. Tried: ${candidatePaths.join(', ')}`
+    );
+}
+
 async function prepareDatabasePath(dbPath: string): Promise<void> {
     const dbDir = path.dirname(dbPath);
     await fs.mkdir(dbDir, { recursive: true });
+    const dbExists = await fs.stat(dbPath).then(() => true).catch(() => false);
 
     try {
         await fs.chmod(dbDir, 0o777);
@@ -34,16 +62,15 @@ async function prepareDatabasePath(dbPath: string): Promise<void> {
         console.warn(`Could not chmod database directory ${dbDir}:`, error);
     }
 
-    try {
-        await fs.access(dbDir, fsConstants.W_OK);
-    } catch (error) {
-        const stat = await fs.stat(dbDir).catch(() => null);
-        console.error(`Database directory is not writable: ${dbDir}`, stat);
-        throw error;
-    }
-
-    const dbExists = await fs.stat(dbPath).then(() => true).catch(() => false);
     if (!dbExists) {
+        try {
+            await fs.access(dbDir, fsConstants.W_OK);
+        } catch (error) {
+            const stat = await fs.stat(dbDir).catch(() => null);
+            console.error(`Database directory is not writable: ${dbDir}`, stat);
+            throw error;
+        }
+
         await fs.writeFile(dbPath, '');
     }
 
@@ -54,7 +81,7 @@ async function prepareDatabasePath(dbPath: string): Promise<void> {
     }
 
     try {
-        await fs.access(dbPath, fsConstants.W_OK);
+        await fs.access(dbPath, fsConstants.R_OK | fsConstants.W_OK);
     } catch (error) {
         const stat = await fs.stat(dbPath).catch(() => null);
         console.error(`Database file is not writable: ${dbPath}`, stat);
