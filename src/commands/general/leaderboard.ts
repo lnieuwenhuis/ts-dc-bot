@@ -7,6 +7,7 @@ import {
     ActionRowBuilder,
     ButtonInteraction,
     MessageFlags,
+    Guild,
 } from 'discord.js';
 import { UserGuildModel, type LeaderboardEntry, type UserRankContext } from '../../database/index.js';
 
@@ -22,6 +23,64 @@ export const data = new SlashCommandBuilder()
             .setMinValue(1)
             .setRequired(false)
     );
+
+// ─── Name resolution ──────────────────────────────────────────────────────────
+//
+// Priority: server nickname → account username → global display name → 'Unknown User'
+//
+// We batch-fetch all members on the current page + rank context in one call so
+// we never hit rate limits with individual requests.
+
+async function resolveDisplayNames(
+    guild: Guild,
+    userIds: string[],
+): Promise<Map<string, string>> {
+    const nameMap = new Map<string, string>();
+    if (userIds.length === 0) return nameMap;
+
+    try {
+        const members = await guild.members.fetch({ user: userIds });
+        for (const [id, member] of members) {
+            nameMap.set(
+                id,
+                member.nickname
+                    ?? member.user.username
+                    ?? member.user.globalName
+                    ?? 'Unknown User',
+            );
+        }
+    } catch {
+        // Batch fetch failed — fall back to individual fetches so partial data
+        // is still better than nothing.
+        await Promise.allSettled(
+            userIds.map(async userId => {
+                try {
+                    const member = await guild.members.fetch(userId);
+                    nameMap.set(
+                        userId,
+                        member.nickname
+                            ?? member.user.username
+                            ?? member.user.globalName
+                            ?? 'Unknown User',
+                    );
+                } catch {
+                    nameMap.set(userId, 'Unknown User');
+                }
+            }),
+        );
+    }
+
+    // Fill in anything that wasn't returned (e.g. user left the server)
+    for (const id of userIds) {
+        if (!nameMap.has(id)) nameMap.set(id, 'Unknown User');
+    }
+
+    return nameMap;
+}
+
+function withResolvedName(entry: LeaderboardEntry, nameMap: Map<string, string>): LeaderboardEntry {
+    return { ...entry, username: nameMap.get(entry.user_id) ?? entry.username };
+}
 
 // ─── Formatting helpers ────────────────────────────────────────────────────────
 
@@ -49,7 +108,6 @@ function buildEmbed(
     totalUsers: number,
     currentPage: number,
     totalPages: number,
-    requestingUserId: string,
     rankContext: UserRankContext | null,
 ): EmbedBuilder {
     const embed = new EmbedBuilder()
@@ -64,18 +122,13 @@ function buildEmbed(
         embed.setDescription(entries.map(formatEntry).join('\n'));
     }
 
-    // Always show the requesting user's rank context
     if (rankContext) {
         const { userEntry, above, below } = rankContext;
         const lines: string[] = [];
 
-        if (above) {
-            lines.push(formatEntry(above));
-        }
+        if (above) lines.push(formatEntry(above));
         lines.push(`${formatEntry(userEntry)} ← **you**`);
-        if (below) {
-            lines.push(formatEntry(below));
-        }
+        if (below) lines.push(formatEntry(below));
 
         embed.addFields({
             name: `📍 Your Position — #${userEntry.rank} of ${totalUsers.toLocaleString()}`,
@@ -123,11 +176,12 @@ interface LeaderboardResponse {
 }
 
 async function buildLeaderboardResponse(
-    guildId: string,
-    guildName: string,
+    guild: Guild,
     requestingUserId: string,
     page: number,
 ): Promise<LeaderboardResponse> {
+    const guildId = guild.id;
+
     const totalUsers = await UserGuildModel.getTotalUsersInGuild(guildId);
     const totalPages = Math.max(1, Math.ceil(totalUsers / PAGE_SIZE));
     const safePage = Math.min(Math.max(1, page), totalPages);
@@ -138,7 +192,27 @@ async function buildLeaderboardResponse(
         UserGuildModel.getUserRankContext(requestingUserId, guildId),
     ]);
 
-    const embed = buildEmbed(guildName, entries, totalUsers, safePage, totalPages, requestingUserId, rankContext);
+    // Collect every user ID we'll render so we can batch-resolve names once.
+    const idsToResolve = new Set<string>(entries.map(e => e.user_id));
+    if (rankContext) {
+        idsToResolve.add(rankContext.userEntry.user_id);
+        if (rankContext.above) idsToResolve.add(rankContext.above.user_id);
+        if (rankContext.below) idsToResolve.add(rankContext.below.user_id);
+    }
+
+    const nameMap = await resolveDisplayNames(guild, [...idsToResolve]);
+
+    // Apply resolved names to every entry before rendering.
+    const resolvedEntries = entries.map(e => withResolvedName(e, nameMap));
+    const resolvedContext: UserRankContext | null = rankContext
+        ? {
+            userEntry: withResolvedName(rankContext.userEntry, nameMap),
+            above: rankContext.above ? withResolvedName(rankContext.above, nameMap) : null,
+            below: rankContext.below ? withResolvedName(rankContext.below, nameMap) : null,
+        }
+        : null;
+
+    const embed = buildEmbed(guild.name, resolvedEntries, totalUsers, safePage, totalPages, resolvedContext);
     const row = buildButtonRow(safePage, totalPages, requestingUserId);
 
     return { embed, row };
@@ -147,10 +221,7 @@ async function buildLeaderboardResponse(
 // ─── Slash command execute ────────────────────────────────────────────────────
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const guildId = interaction.guild?.id;
-    const guildName = interaction.guild?.name ?? 'Server';
-
-    if (!guildId) {
+    if (!interaction.guild) {
         await interaction.reply({
             content: 'This command can only be used in a server!',
             flags: MessageFlags.Ephemeral,
@@ -163,7 +234,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     await interaction.deferReply();
 
     try {
-        const { embed, row } = await buildLeaderboardResponse(guildId, guildName, interaction.user.id, page);
+        const { embed, row } = await buildLeaderboardResponse(interaction.guild, interaction.user.id, page);
 
         await interaction.editReply({
             embeds: [embed],
@@ -178,20 +249,17 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 // ─── Button interaction handler (called from main.ts) ─────────────────────────
 
 export async function handleLeaderboardInteraction(interaction: ButtonInteraction): Promise<void> {
-    const guildId = interaction.guild?.id;
-    const guildName = interaction.guild?.name ?? 'Server';
-
-    if (!guildId) return;
+    if (!interaction.guild) return;
 
     // customId format: leaderboard_{targetPage}_{requestingUserId}
-    // Discord user IDs are numeric only, so splitting on '_' is safe.
+    // Discord user IDs are purely numeric so splitting on '_' is unambiguous.
     const parts = interaction.customId.split('_');
     const targetPage = parseInt(parts[1]!, 10);
     const requestingUserId = parts[2];
 
     if (isNaN(targetPage) || !requestingUserId) return;
 
-    // Only the original requester can paginate
+    // Only the original requester can paginate.
     if (interaction.user.id !== requestingUserId) {
         await interaction.reply({
             content: 'Only the person who ran this command can navigate the pages!',
@@ -203,7 +271,7 @@ export async function handleLeaderboardInteraction(interaction: ButtonInteractio
     await interaction.deferUpdate();
 
     try {
-        const { embed, row } = await buildLeaderboardResponse(guildId, guildName, requestingUserId, targetPage);
+        const { embed, row } = await buildLeaderboardResponse(interaction.guild, requestingUserId, targetPage);
 
         await interaction.editReply({
             embeds: [embed],

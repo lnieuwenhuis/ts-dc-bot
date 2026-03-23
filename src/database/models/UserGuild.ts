@@ -40,8 +40,8 @@ export class UserGuildModel {
     static async create(userId: string, guildId: string): Promise<void> {
         const connection = getDbConnection();
         try {
-            // First ensure user exists
-            await UserModel.createOrUpdate(userId, 'Unknown', '0000');
+            // Guarantee the FK target exists without overwriting a real username
+            await UserModel.ensureExists(userId);
 
             // Then create user guild record
             await connection.run(`
@@ -57,8 +57,8 @@ export class UserGuildModel {
     static async createOrUpdate(userId: string, guildId: string): Promise<void> {
         const connection = getDbConnection();
         try {
-            // First ensure user exists
-            await UserModel.createOrUpdate(userId, 'Unknown', '0000');
+            // Guarantee the FK target exists without overwriting a real username
+            await UserModel.ensureExists(userId);
 
             // Then create/update user guild record
             await connection.run(`

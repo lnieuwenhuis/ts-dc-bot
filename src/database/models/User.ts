@@ -25,6 +25,25 @@ export class UserModel {
         }
     }
 
+    /**
+     * Inserts the user row only if it doesn't already exist.
+     * Never overwrites an existing username — use this when you just need to
+     * guarantee the FK target is present (e.g. from UserGuildModel).
+     */
+    static async ensureExists(userId: string): Promise<void> {
+        const connection = getDbConnection();
+        try {
+            await connection.run(`
+                INSERT INTO users (id, username, discriminator, chips, total_xp, overall_level)
+                VALUES (?, 'Unknown', '0000', 100, 0, 1)
+                ON CONFLICT(id) DO NOTHING
+            `, [userId]);
+        } catch (error) {
+            console.error('Error ensuring user exists:', error);
+            throw error;
+        }
+    }
+
     static async createOrUpdate(userId: string, username: string, discriminator?: string): Promise<void> {
         const connection = getDbConnection();
         try {
