@@ -2,6 +2,7 @@ import * as quote from './general/quote.js';
 import * as ping from './general/ping.js';
 import * as level from './general/level.js';
 import * as multiquote from './general/multiquote.js';
+import * as leaderboard from './general/leaderboard.js';
 import * as report from './fia/report.js';
 import * as unmute from './admin/unmute.js';
 import * as purge from './admin/purge.js';
@@ -19,6 +20,7 @@ export async function loadCommands() {
         ping,
         level,
         multiquote,
+        leaderboard,
         report,
         unmute,
         purge,

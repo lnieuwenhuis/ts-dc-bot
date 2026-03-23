@@ -4,6 +4,7 @@ import { loadCommands } from "./commands/index";
 import { initDatabase } from "./utils/initDatabase";
 import { handleMessage } from "./utils/onMessage";
 import { handleBlackjackInteraction } from "./commands/casino/blackjack";
+import { handleLeaderboardInteraction } from "./commands/general/leaderboard";
 import { createServer } from "http";
 // import { Player } from "discord-player";
 // import { DefaultExtractors } from "@discord-player/extractor";
@@ -98,7 +99,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 await handleBlackjackInteraction(interaction);
                 return;
             }
-            
+
+            // Check if it's a leaderboard pagination button
+            if (interaction.customId.startsWith('leaderboard_')) {
+                await handleLeaderboardInteraction(interaction);
+                return;
+            }
+
             // Add other button handlers here as needed
             
         } catch (error) {

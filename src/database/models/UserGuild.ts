@@ -21,6 +21,21 @@ export interface UserGuildWithUserData extends UserGuild {
     overall_level: number;
 }
 
+export interface LeaderboardEntry {
+    rank: number;
+    user_id: string;
+    username: string;
+    guild_level: number;
+    guild_xp: number;
+    guild_messages: number;
+}
+
+export interface UserRankContext {
+    userEntry: LeaderboardEntry;
+    above: LeaderboardEntry | null;
+    below: LeaderboardEntry | null;
+}
+
 export class UserGuildModel {
     static async create(userId: string, guildId: string): Promise<void> {
         const connection = getDbConnection();
@@ -172,6 +187,85 @@ export class UserGuildModel {
             return rows as UserGuildWithUserData[];
         } catch (error) {
             console.error('Error getting top guild users:', error);
+            throw error;
+        }
+    }
+
+    static async getTotalUsersInGuild(guildId: string): Promise<number> {
+        const connection = getDbConnection();
+        try {
+            const row = await connection.get<{ count: number }>(
+                `SELECT COUNT(*) as count FROM user_guilds WHERE guild_id = ?`,
+                [guildId]
+            );
+            return row?.count ?? 0;
+        } catch (error) {
+            console.error('Error getting total users in guild:', error);
+            throw error;
+        }
+    }
+
+    static async getLeaderboardPage(guildId: string, offset: number, limit: number): Promise<LeaderboardEntry[]> {
+        const connection = getDbConnection();
+        try {
+            const rows = await connection.all<LeaderboardEntry[]>(`
+                WITH ranked AS (
+                    SELECT
+                        ug.user_id,
+                        u.username,
+                        ug.guild_level,
+                        ug.guild_xp,
+                        ug.guild_messages,
+                        ROW_NUMBER() OVER (ORDER BY ug.guild_level DESC, ug.guild_xp DESC) AS rank
+                    FROM user_guilds ug
+                    JOIN users u ON ug.user_id = u.id
+                    WHERE ug.guild_id = ?
+                )
+                SELECT * FROM ranked
+                ORDER BY rank
+                LIMIT ? OFFSET ?
+            `, [guildId, limit, offset]);
+            return rows as LeaderboardEntry[];
+        } catch (error) {
+            console.error('Error getting leaderboard page:', error);
+            throw error;
+        }
+    }
+
+    static async getUserRankContext(userId: string, guildId: string): Promise<UserRankContext | null> {
+        const connection = getDbConnection();
+        try {
+            const results = await connection.all<LeaderboardEntry[]>(`
+                WITH ranked AS (
+                    SELECT
+                        ug.user_id,
+                        u.username,
+                        ug.guild_level,
+                        ug.guild_xp,
+                        ug.guild_messages,
+                        ROW_NUMBER() OVER (ORDER BY ug.guild_level DESC, ug.guild_xp DESC) AS rank
+                    FROM user_guilds ug
+                    JOIN users u ON ug.user_id = u.id
+                    WHERE ug.guild_id = ?
+                ),
+                user_rank AS (
+                    SELECT rank FROM ranked WHERE user_id = ?
+                )
+                SELECT r.* FROM ranked r, user_rank ur
+                WHERE r.rank BETWEEN ur.rank - 1 AND ur.rank + 1
+                ORDER BY r.rank
+            `, [guildId, userId]);
+
+            const typed = results as LeaderboardEntry[];
+            const userEntry = typed.find(r => r.user_id === userId) ?? null;
+            if (!userEntry) return null;
+
+            const above = typed.find(r => r.rank === userEntry.rank - 1) ?? null;
+            const below = typed.find(r => r.rank === userEntry.rank + 1) ?? null;
+
+            return { userEntry, above, below };
+        } catch (error) {
+            console.error('Error getting user rank context:', error);
             throw error;
         }
     }
