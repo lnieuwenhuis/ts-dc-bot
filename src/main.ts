@@ -5,16 +5,28 @@ import { initDatabase } from "./utils/initDatabase";
 import { handleMessage } from "./utils/onMessage";
 import { handleBlackjackInteraction } from "./commands/casino/blackjack";
 import { handleLeaderboardInteraction } from "./commands/general/leaderboard";
-import { createServer } from "http";
+import { router } from './api/router.js';
+import { encodeToken } from './api/auth.js';
+import './api/routes/stats.js';
+import './api/routes/guilds.js';
+import './api/routes/users.js';
 // import { Player } from "discord-player";
 // import { DefaultExtractors } from "@discord-player/extractor";
 
 // Bind to Railway's port immediately so the health check passes and
 // outbound networking is fully available before we connect to Discord.
 const port = process.env.PORT || 8080;
-createServer((_, res) => { res.writeHead(200); res.end("OK"); }).listen(port, () => {
-    console.log(`Health check server listening on port ${port}`);
+router.post('/auth/login', ({ res, body }) => {
+  const b = body as { password?: string };
+  const adminPassword = process.env.ADMIN_PASSWORD ?? 'changeme';
+  if (b.password !== adminPassword) {
+    router.json(res, 401, { error: 'Invalid password' });
+    return;
+  }
+  const secret = process.env.JWT_SECRET ?? 'default_secret';
+  router.json(res, 200, { token: encodeToken(secret) });
 });
+router.listen(port);
 
 process.on('unhandledRejection', (reason) => {
     console.error('Unhandled rejection:', reason);
