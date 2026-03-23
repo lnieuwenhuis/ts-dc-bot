@@ -2,6 +2,7 @@ import sqlite3 from 'sqlite3';
 import { open, type Database } from 'sqlite';
 import fs from 'fs/promises';
 import path from 'path';
+import { constants as fsConstants } from 'fs';
 
 let connection: Database;
 
@@ -11,7 +12,7 @@ export async function initDatabase(): Promise<Database> {
         ? path.join(volumeMountPath, 'discord_bot.sqlite')
         : path.join(process.cwd(), 'data', 'discord_bot.sqlite');
     const dbPath = process.env.DB_PATH || defaultDbPath;
-    await fs.mkdir(path.dirname(dbPath), { recursive: true });
+    await prepareDatabasePath(dbPath);
 
     connection = await open({
         filename: dbPath,
@@ -21,6 +22,44 @@ export async function initDatabase(): Promise<Database> {
     await connection.exec('PRAGMA foreign_keys = ON;');
     await runMigrations();
     return connection;
+}
+
+async function prepareDatabasePath(dbPath: string): Promise<void> {
+    const dbDir = path.dirname(dbPath);
+    await fs.mkdir(dbDir, { recursive: true });
+
+    try {
+        await fs.chmod(dbDir, 0o777);
+    } catch (error) {
+        console.warn(`Could not chmod database directory ${dbDir}:`, error);
+    }
+
+    try {
+        await fs.access(dbDir, fsConstants.W_OK);
+    } catch (error) {
+        const stat = await fs.stat(dbDir).catch(() => null);
+        console.error(`Database directory is not writable: ${dbDir}`, stat);
+        throw error;
+    }
+
+    const dbExists = await fs.stat(dbPath).then(() => true).catch(() => false);
+    if (!dbExists) {
+        await fs.writeFile(dbPath, '');
+    }
+
+    try {
+        await fs.chmod(dbPath, 0o666);
+    } catch (error) {
+        console.warn(`Could not chmod database file ${dbPath}:`, error);
+    }
+
+    try {
+        await fs.access(dbPath, fsConstants.W_OK);
+    } catch (error) {
+        const stat = await fs.stat(dbPath).catch(() => null);
+        console.error(`Database file is not writable: ${dbPath}`, stat);
+        throw error;
+    }
 }
 
 async function checkTableExists(tableName: string): Promise<boolean> {
